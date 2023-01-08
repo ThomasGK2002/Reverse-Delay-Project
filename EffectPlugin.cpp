@@ -48,7 +48,7 @@ MyEffect::MyEffect(const Parameters& parameters, const Presets& presets)
 : Effect(parameters, presets)
 {
     // Initialise member variables, etc.
-    iBufferSize = 2 * 192000; //2 secs at 192kHz. Use max as dont know sample rate and memory allocation is slow and expensive and thus should be avoided
+    iBufferSize = 0.5 * 192000; //2 secs at 192kHz. Use max as dont know sample rate and memory allocation is slow and expensive and thus should be avoided
     
     pfCircularBuffer = new float[iBufferSize];
     for(int s = 0; s < iBufferSize; s++){
@@ -56,8 +56,6 @@ MyEffect::MyEffect(const Parameters& parameters, const Presets& presets)
     }
     
     iBufferWritePos = 0;
-    
-    duck = 1;
 }
 
 // Destructor: called when the effect is terminated / unloaded
@@ -112,16 +110,18 @@ void MyEffect::process(const float** inputBuffers, float** outputBuffers, int nu
             iBufferWritePos = 0;
         pfCircularBuffer[iBufferWritePos] = fMix;
         
-        iBufferReadPos = iBufferSize - (iBufferWritePos + fSR * fDelayTime);
-        if(iBufferReadPos >= (iBufferWritePos - fSR * 1) && iBufferReadPos < iBufferWritePos){ // BWP-1 < x < BWP
-            duck = duck - 0.1;
-            } else if (iBufferReadPos <= (iBufferWritePos + fSR * 1) && iBufferReadPos > iBufferWritePos){ // BWP < x < BWP+1
-                duck = duck + 0.1;
-            }
+        int c = 0;
+        if(c < 1000)
+        {
+            c++;
+            
+            iBufferReadPos =  fSR * c * fDelayTime - iBufferWritePos;
+        }
         
+        if(iBufferReadPos < 0)
+            iBufferReadPos += iBufferSize;
         
-        float fDelSig = pfCircularBuffer[iBufferReadPos] * fFeedbackGain * duck;
-        
+        float fDelSig = pfCircularBuffer[iBufferReadPos] * fFeedbackGain;
         float fOut = fDelSig + fMix;
         
         fOut0 = fOut;
