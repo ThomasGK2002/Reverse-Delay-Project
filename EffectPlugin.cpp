@@ -111,11 +111,11 @@ void MyEffect::process(const float** inputBuffers, float** outputBuffers, int nu
         pfCircularBuffer[iBufferWritePos] = fMix;
         
         int c = 0;
-        if(c < 1000)
+        if(c < fDelayTime)
         {
             c++;
             
-            iBufferReadPos =  fSR * c * fDelayTime - iBufferWritePos;
+            iBufferReadPos =  fSR * c - iBufferWritePos;
         }
         
         if(iBufferReadPos < 0)
