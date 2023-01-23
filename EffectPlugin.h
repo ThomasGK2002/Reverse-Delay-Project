@@ -30,7 +30,8 @@ public:
 
 private:
     // Declare shared member variables here
-    float *pfCircularBuffer;
-    int iBufferSize, iBufferWritePos;
-    float duck;
+    
+    LPF filter0, filter1;
+    
+    MyBuffer buffer0, buffer1;
 };
