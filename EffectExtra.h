@@ -1,37 +1,53 @@
 //
-//  EffectPlugin.h
-//  MyEffect Plugin Header File
+//  EffectExtra.h
+//  Additional Plugin Code
 //
-//  Used to declare objects and data structures used by the plugin.
+//  This file is a workspace for developing new DSP objects or functions to use in your plugin.
 //
+float cubed(float x){
+    return x * x * x;
+}
 
-#pragma once
-
-#include "apdi/Plugin.h"
-#include "apdi/Helpers.h"
-using namespace APDI;
-
-#include "EffectExtra.h"
-
-class MyEffect : public APDI::Effect
-{
+class MyBuffer{
 public:
-    MyEffect(const Parameters& parameters, const Presets& presets); // constructor (initialise variables, etc.)
-    ~MyEffect();                                                    // destructor (clean up, free memory, etc.)
-
-    void setSampleRate(float sampleRate){ stk::Stk::setSampleRate(sampleRate); }
-    float getSampleRate() const { return stk::Stk::sampleRate(); };
     
-    void process(const float** inputBuffers, float** outputBuffers, int numSamples);
+    void set(){
+        iBufferSize = 0.5 * 192000; //0.5 secs at 192kHz. Use max as sample rate unknown and memory allocation is slow and expensive and thus should be avoided
+        
+        pfCircularBuffer = new float[iBufferSize];
+        for(int s = 0; s < iBufferSize; s++){
+            pfCircularBuffer[s] = 0; //initialising buffer values to 0 - writes over any data already there
+        }
+        
+        iBufferWritePos = 0;
+    }
     
-    void presetLoaded(int iPresetNum, const char *sPresetName);
-    void optionChanged(int iOptionMenu, int iItem);
-    void buttonPressed(int iButton);
-
+    float process(float input, float dParameter){
+     
+        iBufferWritePos++;
+        if(iBufferWritePos == iBufferSize)
+            iBufferWritePos = 0;
+        
+        for(int c = 0; c < dParameter; c++)
+        {
+            iBufferReadPos =  (fSR * c)/1000 - iBufferWritePos;
+            if(iBufferReadPos < 0)
+                iBufferReadPos += iBufferSize;
+        }
+        
+        pfCircularBuffer[iBufferWritePos] = input;
+        
+        fDelSig = pfCircularBuffer[iBufferReadPos];
+        
+        return fDelSig;
+    }
+    
 private:
-    // Declare shared member variables here
-    
-    LPF filter0, filter1;
-    
-    MyBuffer buffer0, buffer1;
+    float *pfCircularBuffer;
+    int iBufferSize, iBufferWritePos;
+    float fSR = getSampleRate();
+    int iBufferReadPos = 0;
+    float fDelSig = 0;
 };
+
+
