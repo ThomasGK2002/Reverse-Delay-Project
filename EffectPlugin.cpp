@@ -30,13 +30,15 @@ extern "C" {
         const Parameters CONTROLS = {
             //  name,       type,              min, max, initial, size
             {   "Feedback Gain",  Parameter::ROTARY, 0.0, 1.0, 0.0, AUTO_SIZE  },
-            {   "Delay Time",  Parameter::ROTARY, 0.0, 1.0, 0.0, AUTO_SIZE  },
+            {   "Delay Time",  Parameter::ROTARY, 0.0, 500.0, 0.0, AUTO_SIZE  },
+            {   "LPF CutOff",  Parameter::ROTARY, 0.0, 10000.0, 10000.0, AUTO_SIZE  },
         };
 
         const Presets PRESETS = {
-            { "Preset 1", { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } },
-            { "Preset 2", { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } },
-            { "Preset 3", { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } },
+            { "Mandolin Preset", { 0.288, 172.179, 9263.441 } },
+            { "DrumPattern Preset", { 0.420, 10.668, 8853.667 } },
+            { "Drum w/noise Preset", { 1.000, 500.000, 3533.447 } },
+            { "Ain't talkin bout code Preset", { 0.239, 49.931, 7040.855 } },
         };
 
         return (APDI::Effect*)new MyEffect(CONTROLS, PRESETS);
@@ -48,14 +50,8 @@ MyEffect::MyEffect(const Parameters& parameters, const Presets& presets)
 : Effect(parameters, presets)
 {
     // Initialise member variables, etc.
-    iBufferSize = 0.5 * 192000; //2 secs at 192kHz. Use max as dont know sample rate and memory allocation is slow and expensive and thus should be avoided
-    
-    pfCircularBuffer = new float[iBufferSize];
-    for(int s = 0; s < iBufferSize; s++){
-        pfCircularBuffer[s] = 0; //initialising buffer values to 0- writes over any data already there
-    }
-    
-    iBufferWritePos = 0;
+    buffer0.set();
+    buffer1.set();
 }
 
 // Destructor: called when the effect is terminated / unloaded
@@ -86,15 +82,18 @@ void MyEffect::buttonPressed(int iButton)
 // (inputBuffer contains the input audio, and processed samples should be stored in outputBuffer)
 void MyEffect::process(const float** inputBuffers, float** outputBuffers, int numSamples)
 {
-    float fIn0, fIn1, fOut0 = 0, fOut1 = 0;
+    float fIn0, fIn1, fOut0, fOut1 = 0;
     const float *pfInBuffer0 = inputBuffers[0], *pfInBuffer1 = inputBuffers[1];
     float *pfOutBuffer0 = outputBuffers[0], *pfOutBuffer1 = outputBuffers[1];
     
     float fFeedbackGain = parameters[0];
     float fDelayTime = parameters[1];
+    float fCutOff = parameters[2];
     
-    float fSR = getSampleRate();
-    int iBufferReadPos = 0;
+    filter0.setCutoff(fCutOff);
+    filter1.setCutoff(fCutOff);
+    
+    float fDel0, fDel1 = 0;
     
     while(numSamples--)
     {
@@ -103,29 +102,14 @@ void MyEffect::process(const float** inputBuffers, float** outputBuffers, int nu
         fIn1 = *pfInBuffer1++;
         
         // Add your effect processing here
-        float fMix = (fIn0 + fIn1) * 0.5;
+        fDel0 = buffer0.process(fIn0, fDelayTime) * fFeedbackGain;
+        fDel1 = buffer1.process(fIn1, fDelayTime) * fFeedbackGain;
         
-        iBufferWritePos++;
-        if(iBufferWritePos == iBufferSize)
-            iBufferWritePos = 0;
-        pfCircularBuffer[iBufferWritePos] = fMix;
+        float fWet0 = filter0.tick(fDel0);
+        float fWet1 = filter1.tick(fDel0);
         
-        int c = 0;
-        if(c < fDelayTime)
-        {
-            c++;
-            
-            iBufferReadPos =  fSR * c - iBufferWritePos;
-        }
-        
-        if(iBufferReadPos < 0)
-            iBufferReadPos += iBufferSize;
-        
-        float fDelSig = pfCircularBuffer[iBufferReadPos] * fFeedbackGain;
-        float fOut = fDelSig + fMix;
-        
-        fOut0 = fOut;
-        fOut1 = fOut;
+        fOut0 = fWet0 + fIn0;
+        fOut1 = fWet1 + fIn1;
         
         // Copy result to output
         *pfOutBuffer0++ = fOut0;
